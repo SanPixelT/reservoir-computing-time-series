@@ -68,7 +68,7 @@ The main hyperparameters:
 ## Getting started
 
 ```bash
-git clone https://github.com/<your-username>/reservoir-computing-time-series.git
+git clone https://github.com/SanPixelT/reservoir-computing-time-series.git
 cd reservoir-computing-time-series
 
 python -m venv .venv
