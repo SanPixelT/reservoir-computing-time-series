@@ -1,0 +1,14 @@
+# Tested with Python 3.10 / 3.11.
+# ReservoirPy 0.3.x is the version used in the original project (2023).
+# It does not support NumPy 2, so NumPy is pinned below 2.
+reservoirpy>=0.3.5,<0.4
+numpy<2
+hyperopt>=0.2.7
+scikit-learn
+matplotlib
+pandas
+seaborn          # used by reservoirpy's hyperopt report plot
+
+# Optional: only needed for the LSTM baseline in mackey_glass_multistep.py.
+# Install with:  pip install tensorflow
+# tensorflow>=2.10
