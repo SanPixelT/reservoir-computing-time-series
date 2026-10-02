@@ -1,34 +1,8 @@
-"""
-Experiment 3 - Amazon opening stock price prediction
-=====================================================
-
-Applies the sliding-window pipeline from Experiment 2 to real data: daily
-Amazon (AMZN) stock prices from 2014 to 2019.
-
-Unlike Mackey-Glass, stock prices are NON-stationary (the average level
-keeps rising), so this is a harder test of the reservoir.
-
-Setup
------
-* 1259 trading days of opening prices, rescaled to [-1, 1].
-* First 1007 days for training, last 252 days for testing.
-* Window size = 252, i.e. one-step-ahead prediction from the previous 252 days.
-
-Report results (NRMSE): ridge 0.070, default ESN 0.514, optimised ESN 0.053
-(24.29% lower error than ridge).
-
-Data
-----
-Download the dataset and place ``AMZNtrain.csv`` in the ``data/`` folder
-(see data/README.md). Only the ``Open`` column is used for modelling.
-
-Usage
------
-    python src/amazon_stock.py           # full run
-    python src/amazon_stock.py --quick   # 5-trial search, fast check
-
-Figures are saved to results/amazon_stock/.
-"""
+# Experiment 3: same sliding-window pipeline as experiment 2, on Amazon's daily
+# opening price (2014-2019). Needs data/AMZNtrain.csv - see data/README.md.
+#
+#   python src/amazon_stock.py          (full run)
+#   python src/amazon_stock.py --quick  (5 search trials only)
 
 import argparse
 import sys
@@ -44,7 +18,7 @@ from common import (analyse, build_esn, optimise_esn, plot_nrmse_bar,
 
 DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "AMZNtrain.csv"
 
-# Hand-picked starting hyperparameters for the stock data (before optimisation)
+# starting values I picked by hand for the stock data
 AMAZON_DEFAULT_ESN = dict(
     units=500,
     lr=0.3,
@@ -54,11 +28,10 @@ AMAZON_DEFAULT_ESN = dict(
     input_connectivity=0.05,
     seed=1234,
 )
-OPTIMISED_RIDGE = 1e-8  # note: the search itself used ridge = 1e-7
+OPTIMISED_RIDGE = 1e-8  # the search used 1e-7
 
 
 def plot_price_columns(df, out_dir):
-    """Save a plot of each raw price column (Open, Close, High, Low, Adj Close)."""
     for column in ["Open", "Close", "High", "Low", "Adj Close"]:
         if column not in df.columns:
             continue
@@ -70,10 +43,8 @@ def plot_price_columns(df, out_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--quick", action="store_true",
-                        help="only 5 hyperparameter trials, for a fast check that everything runs")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--quick", action="store_true", help="5 search trials only")
     parser.add_argument("--data", type=Path, default=DATA_FILE, help="path to the AMZN CSV file")
     args = parser.parse_args()
 
@@ -84,15 +55,15 @@ def main():
     df = pd.read_csv(args.data)
     plot_price_columns(df, out_dir)
 
-    # Opening price as a column vector, rescaled to [-1, 1]
+    # only the opening price is used
     X_open = rescale(np.vstack(df["Open"].to_numpy(dtype=float)))
     X_train, y_train, X_test, y_test, train_data, split_index, window_size = \
         split_sliding_window(X_open)
 
-    # 1. Baseline without a reservoir
+    # no reservoir
     y_ridge = ridge_baseline(X_train, y_train, X_test)
 
-    # 2. ESN with hand-picked starting values
+    # ESN before tuning
     esn = build_esn(**AMAZON_DEFAULT_ESN, input_dim=window_size)
     y_esn = esn.fit(X_train, y_train).run(X_test)
 
@@ -100,11 +71,10 @@ def main():
     analyse(y_test, y_ridge, "Without reservoir (ridge):")
     analyse(y_test, y_esn, "With reservoir (default ESN):")
 
-    # 3. Hyperparameter search (same search space as Mackey-Glass)
     best = optimise_esn("hyperopt-amazonOpening", X_train, y_train, X_test, y_test,
                         window_size, out_dir, max_evals=5 if args.quick else 200)
 
-    # 4. ESN with the best values found
+    # ESN with the best values from the search
     esn_opt = build_esn(500, lr=best["lr"], sr=best["sr"], input_scaling=best["iss"],
                         rc_connectivity=best["rcntvt"], input_connectivity=best["icntvt"],
                         seed=1234, input_dim=window_size, ridge=OPTIMISED_RIDGE)

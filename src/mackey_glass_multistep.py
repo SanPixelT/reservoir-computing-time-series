@@ -1,34 +1,9 @@
-"""
-Experiment 1 - Mackey-Glass multi-step-ahead forecasting
-=========================================================
-
-Question: given the current value of the Mackey-Glass series, how well can
-different models predict its value k steps into the future?
-
-Models compared
----------------
-* ESN   - Echo State Network (reservoir + ridge readout)
-* Ridge - the same ridge readout with NO reservoir (shows what the reservoir adds)
-* LSTM  - recurrent network trained with back-propagation (optional, needs TensorFlow)
-* SVR   - support vector regression with an RBF kernel
-
-Steps
------
-1. Generate 2510 Mackey-Glass samples (tau = 20) and rescale to [-1, 1].
-2. Forecast 10 steps ahead with every model; plot and print R^2 / NRMSE.
-3. Repeat for 100 steps ahead.
-4. Sweep the horizon k = 1 ... 99 and plot NRMSE against k for every model.
-
-Report results (NRMSE): 10 steps -> ESN 0.0014 vs ridge 0.2316,
-                       100 steps -> ESN 0.0660 vs ridge 0.2519.
-
-Usage
------
-    python src/mackey_glass_multistep.py            # full run, as in the report
-    python src/mackey_glass_multistep.py --quick    # fast check (coarse sweep, no LSTM)
-
-Figures are saved to results/mackey_glass_multistep/.
-"""
+# Experiment 1: predict the Mackey-Glass series k steps ahead.
+# Compares ESN vs ridge (no reservoir) vs LSTM vs SVR at 10 and 100 steps,
+# then sweeps k from 1 to 99.
+#
+#   python src/mackey_glass_multistep.py          (full run)
+#   python src/mackey_glass_multistep.py --quick  (fast check, no LSTM)
 
 import argparse
 
@@ -45,16 +20,10 @@ TAU = 20
 
 
 def run_horizon(esn, X, forecast, out_dir, use_lstm=True):
-    """Train and evaluate every model for a single forecast horizon.
-
-    ``esn`` is re-used between horizons (as in the original code). Only its
-    readout is re-trained; the reservoir keeps its internal state from the
-    previous run, which acts as a warm-up. See main() for details.
-    """
     X_train, y_train, X_test, y_test, _ = split_multistep(X, forecast)
     plot_train_test(X_train, y_train, X_test, y_test, forecast, out_dir)
 
-    # Echo State Network: fit() trains only the ridge readout W_out
+    # fit() only trains the readout
     y_esn = esn.fit(X_train, y_train).run(X_test)
     plot_prediction(y_esn, y_test, f"Prediction for {forecast} timesteps with reservoir (ESN)",
                     out_dir, label="ESN prediction")
@@ -87,12 +56,7 @@ def run_horizon(esn, X, forecast, out_dir, use_lstm=True):
 
 
 def nrmse_sweep(X, horizons, out_dir, use_lstm=True):
-    """NRMSE of every model for each forecast horizon k (report Figure 7.4).
-
-    Shows how accuracy degrades as we predict further ahead. Without a
-    reservoir the error oscillates with k: the prediction lags (is phase
-    shifted from) the true signal, and how much that lag hurts depends on k.
-    """
+    # NRMSE vs k for every model (Figure 7.4 in the report)
     scores = {"ESN": [], "Ridge": [], "LSTM": [], "SVR": []}
 
     for forecast in horizons:
@@ -105,7 +69,7 @@ def nrmse_sweep(X, horizons, out_dir, use_lstm=True):
         scores["SVR"].append(nrmse(y_test, svr_baseline(X_train, y_train, X_test)))
 
         if use_lstm:
-            # A smaller single-layer LSTM (100 units) keeps the 99-model sweep affordable.
+            # smaller LSTM here so the 99 runs don't take forever
             y_lstm = lstm_baseline(X_train, y_train, X_test, layers=(100,))
             if y_lstm is not None:
                 scores["LSTM"].append(nrmse(y_test, y_lstm))
@@ -127,10 +91,8 @@ def nrmse_sweep(X, horizons, out_dir, use_lstm=True):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--quick", action="store_true",
-                        help="coarse k-sweep and no LSTM, for a fast check that everything runs")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--quick", action="store_true", help="coarse sweep, no LSTM")
     parser.add_argument("--no-lstm", action="store_true", help="skip the LSTM baseline")
     args = parser.parse_args()
     use_lstm = not (args.quick or args.no_lstm)
@@ -139,12 +101,9 @@ def main():
     X = load_mackey_glass(tau=TAU)
     plot_mackey_glass(X, 500, TAU, out_dir)
 
-    # One ESN (default hyperparameters) is shared by the 10- and 100-step runs.
-    # The first call pushes a single sample through so the reservoir and
-    # readout weights get initialised. Because the reservoir state is NOT reset
-    # between calls, the 100-step model starts from the state left by the
-    # 10-step test run. This reproduces the report's numbers exactly
-    # (NRMSE 0.0014 and 0.0660); a brand-new ESN gives 0.0731 for 100 steps.
+    # Same ESN used for 10 and 100 steps, like in my original code. The reservoir
+    # state isn't reset in between, so the 100-step run starts from where the
+    # 10-step run ended. A fresh ESN gives 0.0731 instead of 0.0660 (see README).
     esn = build_esn(**DEFAULT_ESN)
     esn(X[0])
 

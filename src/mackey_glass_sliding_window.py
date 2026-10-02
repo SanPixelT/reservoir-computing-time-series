@@ -1,34 +1,8 @@
-"""
-Experiment 2 - Mackey-Glass sliding-window prediction + hyperparameter optimisation
-====================================================================================
-
-Question: using a window of past values, how accurately can an ESN predict
-the next value of the series, and how much does tuning its hyperparameters help?
-
-Setup
------
-* 2510 Mackey-Glass samples, first 2008 for training, last 502 for testing.
-* Each input is the previous 502 values (window size = test length) and the
-  target is the next value, so every test point is a one-step-ahead prediction
-  made from TRUE past values (see "Limitations" in the README).
-
-Steps
------
-1. Ridge regression on the raw windows (no reservoir).
-2. ESN with default hyperparameters.
-3. Random search over 200 hyperparameter sets x 3 reservoirs (hyperopt).
-4. ESN with the best hyperparameters; compare all three.
-
-Report results (NRMSE): ridge 0.014, default ESN 0.162, optimised ESN 0.003
-(78.57% lower error than ridge).
-
-Usage
------
-    python src/mackey_glass_sliding_window.py           # full run (~7 min search)
-    python src/mackey_glass_sliding_window.py --quick   # 5-trial search, fast check
-
-Figures are saved to results/mackey_glass_sliding_window/.
-"""
+# Experiment 2: predict the next Mackey-Glass value from the previous 502 values,
+# then tune the ESN hyperparameters with a random search.
+#
+#   python src/mackey_glass_sliding_window.py          (full run, ~7 min search)
+#   python src/mackey_glass_sliding_window.py --quick  (5 trials only)
 
 import argparse
 
@@ -36,25 +10,23 @@ from common import (DEFAULT_ESN, analyse, build_esn, load_mackey_glass, optimise
                     plot_nrmse_bar, plot_optimisation_comparison, results_folder,
                     ridge_baseline, split_sliding_window)
 
-OPTIMISED_UNITS = 500        # N was fixed to 500 during the search
-OPTIMISED_RIDGE = 1e-8       # note: the search itself used ridge = 1e-7
+OPTIMISED_UNITS = 500
+OPTIMISED_RIDGE = 1e-8  # the search used 1e-7, I used 1e-8 for the final model
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--quick", action="store_true",
-                        help="only 5 hyperparameter trials, for a fast check that everything runs")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--quick", action="store_true", help="5 search trials only")
     args = parser.parse_args()
 
     out_dir = results_folder("mackey_glass_sliding_window")
     X = load_mackey_glass(tau=20)
     X_train, y_train, X_test, y_test, train_data, split_index, window_size = split_sliding_window(X)
 
-    # 1. Baseline without a reservoir
+    # no reservoir
     y_ridge = ridge_baseline(X_train, y_train, X_test)
 
-    # 2. ESN with default hyperparameters (input_dim = window size)
+    # ESN with default settings
     esn = build_esn(**DEFAULT_ESN, input_dim=window_size)
     y_esn = esn.fit(X_train, y_train).run(X_test)
 
@@ -62,11 +34,10 @@ def main():
     analyse(y_test, y_ridge, "Without reservoir (ridge):")
     analyse(y_test, y_esn, "With reservoir (default ESN):")
 
-    # 3. Hyperparameter search
     best = optimise_esn("hyperopt-mackeyGlass", X_train, y_train, X_test, y_test,
                         window_size, out_dir, max_evals=5 if args.quick else 200)
 
-    # 4. Rebuild the ESN with the best values found
+    # ESN with the best values from the search
     esn_opt = build_esn(OPTIMISED_UNITS, lr=best["lr"], sr=best["sr"],
                         input_scaling=best["iss"], rc_connectivity=best["rcntvt"],
                         input_connectivity=best["icntvt"], seed=1234,
