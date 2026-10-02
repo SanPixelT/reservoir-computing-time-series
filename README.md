@@ -48,8 +48,6 @@ More detail is in my report. The main points about what makes a good reservoir a
 
 ## Limitations
 
-<!-- TODO: rewrite this section in my own words -->
-
 - I tuned the hyperparameters on the test set, because I didn't have a separate validation set. So the tuned scores are optimistic.
 - The sliding-window predictions are one step ahead, using the real past values each time, not the model's own predictions.
 - I didn't reset or warm up the reservoir between runs. The 100-step result (0.0660) depends on that. A fresh ESN gets 0.0731.
